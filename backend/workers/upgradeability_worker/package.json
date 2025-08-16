@@ -1,0 +1,23 @@
+{
+  "name": "upgradeability_worker",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node-dev --respawn --transpile-only src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@types/redis": "^4.0.10",
+    "@types/uuid": "^10.0.0",
+    "redis": "^5.8.1",
+    "solc": "^0.8.30",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.2",
+    "uuid": "^11.1.0"
+  }
+}

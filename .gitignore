@@ -1,0 +1,48 @@
+# Step 1: Ignore everything in the project by default.
+# This prevents compiled files (target/, dist/), dependencies (node_modules/),
+# lock files (Cargo.lock, package-lock.json), and any other cruft.
+*
+
+# Step 2: Explicitly UN-ignore the .gitignore file itself and the top-level backend folder.
+!.gitignore
+!backend/
+
+# Step 3: Explicitly UN-ignore the directory structure.
+# This is required so that Git will "walk" into these folders to find the files we want.
+!backend/gateway/
+!backend/gateway/src/
+!backend/workers/
+!backend/workers/core_security_worker/
+!backend/workers/core_security_worker/src/
+!backend/workers/subnet_portability_worker/
+!backend/workers/subnet_portability_worker/src/
+!backend/workers/awm_interop_worker/
+!backend/workers/awm_interop_worker/src/
+!backend/workers/staking_precompile_worker/
+!backend/workers/staking_precompile_worker/src/
+!backend/workers/gas_fee_worker/
+!backend/workers/gas_fee_worker/src/
+!backend/workers/upgradeability_worker/
+!backend/workers/upgradeability_worker/src/
+!backend/workers/ecosystem_dependency_worker/
+!backend/workers/ecosystem_dependency_worker/src/
+!backend/workers/consensus_compliance_worker/
+!backend/workers/consensus_compliance_worker/src/
+
+# Step 4: Explicitly UN-ignore ONLY the specific files you requested.
+# Because we ignored everything in Step 1, only files matching these names
+# inside the un-ignored directories will be added.
+
+# For the Gateway
+!backend/gateway/package.json
+!backend/gateway/tsconfig.json
+!backend/gateway/src/index.ts
+
+# For the Rust Workers
+!backend/workers/*/Cargo.toml
+!backend/workers/*/src/main.rs
+
+# For the Node.js Workers
+!backend/workers/*/package.json
+!backend/workers/*/tsconfig.json
+!backend/workers/*/src/index.ts
