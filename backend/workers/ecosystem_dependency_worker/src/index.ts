@@ -1,4 +1,5 @@
 import { createClient } from 'redis';
+import * as semver from 'semver'; // V2: Import the semver library
 
 interface AnalysisJob {
     job_id: string;
@@ -7,7 +8,7 @@ interface AnalysisJob {
 
 interface DependencyIssue {
     line: number;
-    issue_type: 'Outdated Version' | 'Unknown Source';
+    issue_type: 'Outdated Version' | 'Unknown Source' | 'Floating Pragma';
     description: string;
     recommendation: string;
 }
@@ -18,17 +19,16 @@ interface AnalysisResult {
     output: DependencyIssue[];
 }
 
-// THIS IS OUR CURATED AVALANCHE KNOWLEDGE BASE
-// In a real-world app, this would come from a database or API.
+// V1: Curated knowledge base
 const KNOWN_LIBRARIES: { [key: string]: string } = {
-    '@openzeppelin/contracts': '5.0.0', // General purpose
-    '@openzeppelin/contracts-upgradeable': '5.0.0', // General purpose
-    '@avalabs/core': '0.5.5', // Avalanche-specific
-    '@traderjoe-xyz/core': '2.1.0' // Avalanche DeFi
+    '@openzeppelin/contracts': '5.0.0',
+    '@openzeppelin/contracts-upgradeable': '5.0.0',
+    '@avalabs/core': '0.5.5',
+    '@traderjoe-xyz/core': '2.1.0'
 };
 
 async function main() {
-    console.log('Starting Ecosystem & Dependency Worker...');
+    console.log('Starting Ecosystem & Dependency Worker [V2]...');
     const redisClient = createClient();
     await redisClient.connect();
     console.log('Successfully connected to Redis.');
@@ -44,7 +44,7 @@ async function main() {
                 const job: AnalysisJob = JSON.parse(jobData.element);
                 console.log(`Processing Job ID: ${job.job_id}`);
 
-                const result = analyzeDependencies(job);
+                const result = analyzeDependenciesV2(job);
                 await publishResult(redisClient, result);
             }
         } catch (error) {
@@ -53,44 +53,44 @@ async function main() {
     }
 }
 
-function analyzeDependencies(job: AnalysisJob): AnalysisResult {
+function analyzeDependenciesV2(job: AnalysisJob): AnalysisResult {
     let issues: DependencyIssue[] = [];
-    // Regex to capture import paths like "library/path/Contract.sol" or "@library/path@version/..."
     const importRegex = /import\s+["']([^"']+)["'];/g;
+    const pragmaRegex = /pragma\s+solidity\s*([^\s;]+)/g; // V2: Regex for pragmas
 
     const lines = job.source_code.split('\n');
     for (let i = 0; i < lines.length; i++) {
         const lineContent = lines[i];
+        const lineNum = i + 1;
         let match;
+
+        // V1 Check: Imports
         while ((match = importRegex.exec(lineContent)) !== null) {
             const importPath = match[1];
 
-            // Check for unknown sources (e.g., direct github links)
             if (importPath.startsWith('http:') || importPath.startsWith('https:')) {
                 issues.push({
-                    line: i + 1,
+                    line: lineNum,
                     issue_type: 'Unknown Source',
                     description: `Import from a direct URL (${importPath}) is detected.`,
-                    recommendation: 'Importing from URLs is risky. Always use a package manager with version pinning (like Foundry or Hardhat) to ensure dependency integrity.',
+                    recommendation: 'Importing from URLs is risky. Use a package manager with version pinning to ensure dependency integrity.',
                 });
-                continue; // Move to next import
+                continue;
             }
 
-            // Check for outdated versions of known libraries
             for (const libName in KNOWN_LIBRARIES) {
                 if (importPath.includes(libName)) {
-                    // Simple version check, looks for @x.y.z in the path
-                    const versionMatch = importPath.match(/@(\d+\.\d+\.\d+)/);
+                    const versionMatch = importPath.match(/@([\d\.]+-?[A-Za-z\.\d]*)/); // More flexible version regex
                     if (versionMatch) {
-                        const importedVersion = versionMatch[1];
+                        const importedVersion = semver.coerce(versionMatch[1]); // V2: Use semver to parse
                         const latestVersion = KNOWN_LIBRARIES[libName];
                         
-                        // NOTE: This is a basic string comparison. A real app would use semantic versioning.
-                        if (importedVersion < latestVersion) {
+                        // V2: Use semver.lt for proper comparison
+                        if (importedVersion && semver.lt(importedVersion, latestVersion)) {
                              issues.push({
-                                line: i + 1,
+                                line: lineNum,
                                 issue_type: 'Outdated Version',
-                                description: `An outdated version of ${libName} (${importedVersion}) is imported.`,
+                                description: `An outdated version of ${libName} (${importedVersion.version}) is imported.`,
                                 recommendation: `The recommended version is ${latestVersion}. Outdated libraries may contain known vulnerabilities.`,
                             });
                         }
@@ -98,13 +98,35 @@ function analyzeDependencies(job: AnalysisJob): AnalysisResult {
                 }
             }
         }
+        
+        // --- V2 UPGRADE: Floating Pragma Check ---
+        // Reset regex state for the next check on the same line
+        pragmaRegex.lastIndex = 0; 
+        while ((match = pragmaRegex.exec(lineContent)) !== null) {
+            const versionConstraint = match[1];
+            if (versionConstraint.startsWith('^') || versionConstraint.startsWith('~')) {
+                issues.push({
+                    line: lineNum,
+                    issue_type: 'Floating Pragma',
+                    description: `A floating pragma ('pragma solidity ${versionConstraint}') was detected.`,
+                    recommendation: 'While useful for development, floating pragmas can lead to non-deterministic builds. For production contracts, pin to an exact Solidity version (e.g., `pragma solidity 0.8.20;`) to ensure verifiability and prevent unexpected behavior from future compiler versions.',
+                });
+            }
+        }
+        // --- END OF V2 UPGRADE ---
     }
 
-    console.log(`Analysis complete. Found ${issues.length} dependency issues for Job ID: ${job.job_id}`);
+    console.log(`V2 analysis complete. Found ${issues.length} dependency issues for Job ID: ${job.job_id}`);
+    
+    // Filter out duplicate issues
+    const uniqueIssues = issues.filter((issue, index, self) =>
+        index === self.findIndex((t) => (t.description === issue.description))
+    );
+
     return {
         job_id: job.job_id,
-        worker_name: "EcosystemDependencyWorker",
-        output: issues,
+        worker_name: "EcosystemDependencyWorkerV2",
+        output: uniqueIssues,
     };
 }
 
@@ -112,7 +134,7 @@ async function publishResult(client: any, result: AnalysisResult) {
     const channel = 'sentinel_results';
     const resultJson = JSON.stringify(result);
     await client.rPush(channel, resultJson);
-    console.log(`Published result for Job ID: ${result.job_id}`);
+    console.log(`Published V2 result for Job ID: ${result.job_id}`);
 }
 
 main().catch(console.error);

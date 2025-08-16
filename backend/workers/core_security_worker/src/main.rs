@@ -1,10 +1,23 @@
 use redis::{Commands, Client, Connection};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::env;
 use std::fs;
 use subprocess::{Exec, Redirection};
 use uuid::Uuid;
 use home::home_dir;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct InformationalFinding {
+    finding_type: String,
+    message: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct V2AnalysisResult {
+    informational_findings: Vec<InformationalFinding>,
+    slither_report: Value, // This will be the main JSON report
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct AnalysisJob {
@@ -13,29 +26,24 @@ struct AnalysisJob {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct AnalysisResult {
+struct FinalResult {
     job_id: String,
     worker_name: String,
-    output: serde_json::Value,
+    output: V2AnalysisResult,
 }
 
-
 fn main() -> redis::RedisResult<()> {
-    println!("Starting Core Security Worker...");
-
+    println!("Starting Core Security Worker [V2.1 FINAL]...");
     let redis_client = Client::open("redis://127.0.0.1/")?;
     let mut redis_con = redis_client.get_connection()?;
     println!("Successfully connected to Redis.");
-
     listen_for_jobs(&mut redis_con);
-
     Ok(())
 }
 
 fn listen_for_jobs(con: &mut Connection) {
     let channel = "core_security_jobs";
     println!("Listening for jobs on channel: '{}'", channel);
-
     loop {
         let job_data: Result<Vec<String>, _> = con.blpop(channel, 0);
         match job_data {
@@ -46,7 +54,7 @@ fn listen_for_jobs(con: &mut Connection) {
                 match job {
                     Ok(parsed_job) => {
                         println!("Processing Job ID: {}", parsed_job.job_id);
-                        let result = process_slither_job(&parsed_job);
+                        let result = tokio::runtime::Runtime::new().unwrap().block_on(process_job_v2(&parsed_job));
                         publish_result(con, result);
                     }
                     Err(e) => eprintln!("Error parsing job JSON: {}", e),
@@ -57,101 +65,98 @@ fn listen_for_jobs(con: &mut Connection) {
     }
 }
 
-fn process_slither_job(job: &AnalysisJob) -> AnalysisResult {
-    let unique_id = Uuid::new_v4();
-    let temp_dir = env::temp_dir();
+// --- V2.1: The Slither function now returns BOTH the JSON and the console warnings ---
+async fn run_slither(contract_path: &std::path::Path) -> Result<(Value, Vec<InformationalFinding>), String> {
+    println!("Running Slither for full analysis...");
+    let json_output_filename = format!("{}.json", Uuid::new_v4());
+    let json_output_path = env::temp_dir().join(&json_output_filename);
 
-    let contract_filename = format!("{}.sol", unique_id);
-    let contract_path = temp_dir.join(&contract_filename);
-    let json_output_filename = format!("{}.json", unique_id);
-    let json_output_path = temp_dir.join(&json_output_filename);
-    
     let existing_path = env::var("PATH").unwrap_or_else(|_| "".to_string());
-    
     let new_path = match home_dir() {
-        Some(path) => {
-            let solc_select_path = path.join(".solc-select").to_string_lossy().to_string();
-            let local_bin_path = path.join(".local/bin").to_string_lossy().to_string();
-            format!("{}:{}:{}", solc_select_path, local_bin_path, existing_path)
-        },
+        Some(path) => format!("{}:{}:{}", path.join(".solc-select").to_string_lossy(), path.join(".local/bin").to_string_lossy(), existing_path),
         None => existing_path,
     };
 
-    println!("Using augmented PATH: {}", new_path);
+    let capture = Exec::cmd("python3")
+        .arg("-m").arg("slither")
+        .arg(contract_path)
+        .arg("--json").arg(&json_output_path)
+        .env("PATH", &new_path)
+        .stdout(Redirection::Pipe).stderr(Redirection::Pipe)
+        .capture(); // We use .capture() to get stdout/stderr
+
+    let mut informational_findings = Vec::new();
+
+    match capture {
+        Ok(data) => {
+            // --- V2.1 UPGRADE: Parse stderr for warnings ---
+            let stderr_str = String::from_utf8_lossy(&data.stderr);
+            for line in stderr_str.lines() {
+                if line.contains("Warning: Unused local variable.") {
+                    informational_findings.push(InformationalFinding {
+                        finding_type: "Compiler Warning".to_string(),
+                        message: line.trim().to_string(),
+                    });
+                }
+            }
+            // --- END OF UPGRADE ---
+            
+            if json_output_path.exists() {
+                let json_str = fs::read_to_string(&json_output_path).map_err(|e| e.to_string())?;
+                fs::remove_file(&json_output_path).ok();
+                let slither_json: Value = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+                println!("Slither analysis successful.");
+                Ok((slither_json, informational_findings))
+            } else {
+                Err("Slither failed to produce an output file.".to_string())
+            }
+        }
+        Err(e) => Err(format!("Failed to execute Slither command: {}", e)),
+    }
+}
+
+async fn process_job_v2(job: &AnalysisJob) -> FinalResult {
+    let unique_id = Uuid::new_v4();
+    let contract_filename = format!("{}.sol", unique_id);
+    let contract_path = env::temp_dir().join(&contract_filename);
 
     if let Err(e) = fs::write(&contract_path, &job.source_code) {
-        eprintln!("Failed to write to temporary file: {}", e);
-        return create_error_result(job, "Failed to create temporary contract file.");
+        return create_error_result(job, &format!("Failed to create temporary file: {}", e));
     }
 
-    println!("Running Slither on temporary file: {:?}", contract_path);
-    
-    // Execute the command, but we will no longer immediately trust the exit code
-    let capture_result = Exec::cmd("python3")
-        .arg("-m")
-        .arg("slither")
-        .arg(&contract_path)
-        .arg("--json")
-        .arg(&json_output_path)
-        .env("PATH", &new_path)
-        .stdout(Redirection::Pipe)
-        .stderr(Redirection::Pipe)
-        .capture();
+    let (slither_report, informational_findings) = run_slither(&contract_path).await.unwrap_or_else(|err_str| {
+        let error_report = serde_json::json!({ "success": false, "error": err_str, "results": {} });
+        (error_report, Vec::new())
+    });
 
-    // --- START OF THE FINAL LOGIC FIX ---
-    // Our new definition of success: was the JSON file created?
-    let result = match fs::read_to_string(&json_output_path) {
-        Ok(json_str) => {
-            // YES! The file exists. The run was a success.
-            println!("Slither analysis successful. Found JSON output file.");
-            let slither_json: serde_json::Value = serde_json::from_str(&json_str)
-                .unwrap_or_else(|_| serde_json::json!({ "error": "Failed to parse Slither JSON output from file." }));
-            
-            AnalysisResult {
-                job_id: job.job_id.clone(),
-                worker_name: "CoreSecurityWorker".to_string(),
-                output: slither_json,
-            }
-        },
-        Err(_) => {
-            // NO. The file does not exist. A true failure occurred.
-            // Now we can use the stderr from the process to report the error.
-            let error_msg = match capture_result {
-                Ok(data) => String::from_utf8_lossy(&data.stderr).to_string(),
-                Err(e) => e.to_string(),
-            };
-            eprintln!("Slither execution truly failed. No JSON file found. Error: {}", error_msg);
-            create_error_result(job, &format!("Slither execution failed: {}", error_msg))
-        }
-    };
-    // --- END OF THE FINAL LOGIC FIX ---
+    fs::remove_file(&contract_path).ok();
 
-    if let Err(e) = fs::remove_file(&contract_path) {
-        eprintln!("Warning: Failed to remove temporary contract file: {}", e);
-    }
-    // Use `if let` here to avoid a panic if the file doesn't exist
-    if let Err(e) = fs::remove_file(&json_output_path) {
-        eprintln!("Warning: Failed to remove temporary json file: {}", e);
-    }
-
-    result
-}
-
-fn create_error_result(job: &AnalysisJob, error_message: &str) -> AnalysisResult {
-    AnalysisResult {
+    FinalResult {
         job_id: job.job_id.clone(),
-        worker_name: "CoreSecurityWorker".to_string(),
-        output: serde_json::json!({
-            "success": false, "error": "WorkerError", "results": { "detectors": [{"check": "WorkerInternalError", "description": error_message, "impact": "High"}] }
-        }),
+        worker_name: "CoreSecurityWorkerV2.1".to_string(),
+        output: V2AnalysisResult {
+            informational_findings,
+            slither_report,
+        },
     }
 }
 
-fn publish_result(con: &mut Connection, result: AnalysisResult) {
+fn create_error_result(job: &AnalysisJob, error_message: &str) -> FinalResult {
+     FinalResult {
+        job_id: job.job_id.clone(),
+        worker_name: "CoreSecurityWorkerV2.1".to_string(),
+        output: V2AnalysisResult {
+            informational_findings: vec![InformationalFinding{ finding_type: "error".to_string(), message: error_message.to_string() }],
+            slither_report: Value::Null,
+        },
+    }
+}
+
+fn publish_result(con: &mut Connection, result: FinalResult) {
     let channel = "sentinel_results";
     match serde_json::to_string(&result) {
         Ok(result_json) => {
-            println!("Publishing result for Job ID: {}", result.job_id);
+            println!("Publishing V2.1 result for Job ID: {}", result.job_id);
             if let Err(e) = con.rpush::<_, _, ()>(channel, result_json) {
                 eprintln!("Failed to publish result to Redis: {}", e);
             }
