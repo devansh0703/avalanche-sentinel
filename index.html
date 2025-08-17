@@ -3,136 +3,928 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Avalanche Sentinel - V3</title>
+    <title>Avalanche Sentinel - Smart Contract Analysis Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/monaco-editor@0.44.0/min/vs/loader.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"; line-height: 1.6; margin: 0; padding: 2em; background: #f9f9fb; color: #1a1a1a; }
-        main { max-width: 960px; margin: 0 auto; background: #fff; padding: 2em; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        h1, h2 { text-align: center; color: #000; border-bottom: 1px solid #eee; padding-bottom: 0.5em;}
-        textarea { width: 100%; font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace; font-size: 14px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; resize: vertical; }
-        #codeInput { min-height: 300px; }
-        #genesisInput { min-height: 150px; }
-        .controls { display: flex; justify-content: space-between; align-items: center; margin: 1.5em 0; padding: 1em; background-color: #f7f7f7; border-radius: 6px; }
-        select, button { font-size: 16px; padding: 10px 15px; border-radius: 6px; border: 1px solid #ccc; cursor: pointer; }
-        button:disabled { cursor: not-allowed; background: #e9e9e9; color: #999; }
-        #analyzeButton { background: #d82a2a; color: #fff; border-color: #d82a2a; font-weight: bold; }
-        #status { text-align: center; font-weight: bold; padding: 0.5em; border-radius: 4px; }
-        .status-idle { color: #555; }
-        .status-progress { color: #337ab7; background-color: #e7f3fe; }
-        .status-complete { color: #3c763d; background-color: #dff0d8; }
-        .status-error { color: #a94442; background-color: #f2dede; }
-        #results { border: 1px solid #eee; padding: 0 1em; margin-top: 1em; min-height: 100px; background: #fafafa; font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace; font-size: 13px; border-radius: 6px; }
-        .issue { border-bottom: 1px solid #e5e5e5; padding: 1em 0; }
-        .issue:last-child { border-bottom: none; }
-        .issue-title { font-weight: bold; margin-bottom: 0.5em; display: block; }
-        .issue-recommendation { background: #f0f0f0; padding: 0.5em; border-radius: 4px; margin-top: 0.5em; }
-        .issue strong { color: #333; }
-        .issue-type-critical, .issue-type-security { color: #d9534f; }
-        .issue-type-portability { color: #5bc0de; }
-        .issue-type-awm { color: #f0ad4e; }
-        .issue-type-staking { color: #337ab7; }
-        .issue-type-gas { color: #5cb85c; }
-        .issue-type-upgrade { color: #777; }
-        .issue-type-ecosystem { color: #6f5499; }
-        .issue-type-consensus { color: #d9534f; }
-        #genesisContainer { display: none; margin-top: 1em; }
+        :root {
+            --avalanche-red: #E84142;
+            --avalanche-red-hover: #d73334;
+            --avalanche-dark: #1a1d29;
+            --avalanche-darker: #0f1118;
+            --avalanche-gray: #2d3340;
+            --avalanche-light-gray: #4a5568;
+            --avalanche-white: #ffffff;
+            --avalanche-off-white: #f7f8fa;
+            --avalanche-border: #e2e8f0;
+            --success-green: #10b981;
+            --warning-yellow: #f59e0b;
+            --error-red: #ef4444;
+            --info-blue: #3b82f6;
+            --shadow-light: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-medium: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --shadow-heavy: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--avalanche-off-white);
+            color: var(--avalanche-dark);
+            line-height: 1.6;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 60px 1fr 1fr;
+            height: 100vh;
+            gap: 1px;
+            background: var(--avalanche-border);
+        }
+
+        /* Header */
+        .header {
+            grid-column: 1 / -1;
+            background: var(--avalanche-white);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            box-shadow: var(--shadow-light);
+            z-index: 100;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--avalanche-red), #ff6b6b);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--avalanche-dark);
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--avalanche-light-gray);
+            margin-left: 0.5rem;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 14px;
+            color: var(--avalanche-light-gray);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* Top Left - Code Editor Pane */
+        .code-pane {
+            background: var(--avalanche-white);
+            display: flex;
+            flex-direction: column;
+            grid-row: 2;
+            grid-column: 1;
+        }
+
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--avalanche-border);
+            background: var(--avalanche-off-white);
+        }
+
+        .code-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--avalanche-dark);
+        }
+
+        .code-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 12px;
+            color: var(--avalanche-light-gray);
+        }
+
+        .editor-container {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+
+        /* Top Right - Control Panel */
+        .control-panel {
+            background: var(--avalanche-white);
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            grid-row: 2;
+            grid-column: 2;
+            overflow-y: auto;
+        }
+
+        .project-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .project-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--avalanche-border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--avalanche-white);
+            transition: border-color 0.2s;
+        }
+
+        .project-input:focus {
+            outline: none;
+            border-color: var(--avalanche-red);
+            box-shadow: 0 0 0 3px rgba(232, 65, 66, 0.1);
+        }
+
+        .analysis-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .section-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--avalanche-dark);
+            margin-bottom: 0.75rem;
+            display: block;
+        }
+
+        .analysis-select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--avalanche-border);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--avalanche-white);
+            cursor: pointer;
+        }
+
+        .genesis-section {
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+
+        .genesis-textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 0.75rem;
+            border: 1px solid var(--avalanche-border);
+            border-radius: 8px;
+            font-family: 'SF Mono', monospace;
+            font-size: 12px;
+            resize: vertical;
+        }
+
+        .analyze-button {
+            width: 100%;
+            padding: 1rem;
+            background: var(--avalanche-red);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .analyze-button:hover:not(:disabled) {
+            background: var(--avalanche-red-hover);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .analyze-button:disabled {
+            background: var(--avalanche-light-gray);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .scorecard {
+            display: none;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .score-card {
+            text-align: center;
+            padding: 0.75rem;
+            border-radius: 8px;
+            background: var(--avalanche-off-white);
+        }
+
+        .score-number {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .score-label {
+            font-size: 10px;
+            color: var(--avalanche-light-gray);
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .critical { color: var(--error-red); }
+        .warning { color: var(--warning-yellow); }
+        .info { color: var(--info-blue); }
+
+        /* Worker Grid */
+        .worker-grid {
+            display: none;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .worker-card {
+            background: var(--avalanche-off-white);
+            border: 2px solid transparent;
+            border-radius: 8px;
+            padding: 0.5rem;
+            text-align: center;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .worker-card.active {
+            border-color: var(--success-green);
+            background: rgba(16, 185, 129, 0.1);
+            animation: workerComplete 0.5s ease-out;
+        }
+
+        @keyframes workerComplete {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .worker-icon {
+            width: 20px;
+            height: 20px;
+            margin: 0 auto 0.25rem;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            background: var(--avalanche-white);
+            color: var(--avalanche-light-gray);
+            transition: all 0.3s;
+        }
+
+        .worker-card.active .worker-icon {
+            background: var(--success-green);
+            color: white;
+        }
+
+        .worker-name {
+            font-size: 9px;
+            font-weight: 500;
+            color: var(--avalanche-light-gray);
+            line-height: 1.2;
+        }
+
+        .worker-card.active .worker-name {
+            color: var(--avalanche-dark);
+        }
+
+        .checkmark {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 12px;
+            height: 12px;
+            background: var(--success-green);
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 8px;
+        }
+
+        .worker-card.active .checkmark {
+            display: flex;
+        }
+
+        /* Bottom Left - Results Panel */
+        .results-panel {
+            background: var(--avalanche-white);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            grid-row: 3;
+            grid-column: 1;
+        }
+
+        .results-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--avalanche-border);
+            background: var(--avalanche-off-white);
+        }
+
+        .results-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--avalanche-dark);
+        }
+
+        .results-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        /* Bottom Right - Extended Results Panel */
+        .extended-results-panel {
+            background: var(--avalanche-white);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            grid-row: 3;
+            grid-column: 2;
+        }
+
+        .extended-results-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--avalanche-border);
+            background: var(--avalanche-off-white);
+        }
+
+        .extended-results-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--avalanche-dark);
+        }
+
+        .extended-results-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--avalanche-light-gray);
+        }
+
+        .empty-state-icon {
+            font-size: 36px;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        .issue-card {
+            background: var(--avalanche-white);
+            border: 1px solid var(--avalanche-border);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+
+        .issue-card:hover {
+            box-shadow: var(--shadow-medium);
+            border-color: var(--avalanche-red);
+        }
+
+        .issue-header {
+            padding: 0.75rem;
+            background: var(--avalanche-off-white);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .issue-left {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .severity-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .severity-critical {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--error-red);
+        }
+
+        .severity-high {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning-yellow);
+        }
+
+        .severity-medium {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--info-blue);
+        }
+
+        .severity-low {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success-green);
+        }
+
+        .issue-title-text {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--avalanche-dark);
+        }
+
+        .worker-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 9px;
+            color: var(--avalanche-light-gray);
+            background: var(--avalanche-white);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            border: 1px solid var(--avalanche-border);
+        }
+
+        .issue-body {
+            padding: 0.75rem;
+        }
+
+        .issue-description {
+            margin-bottom: 0.75rem;
+            line-height: 1.5;
+            color: var(--avalanche-dark);
+            font-size: 13px;
+        }
+
+        .issue-recommendation {
+            background: rgba(16, 185, 129, 0.05);
+            border-left: 3px solid var(--success-green);
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-bottom: 0.75rem;
+        }
+
+        .recommendation-title {
+            font-weight: 600;
+            color: var(--success-green);
+            margin-bottom: 0.25rem;
+            font-size: 12px;
+        }
+
+        .show-code-btn {
+            background: var(--avalanche-red);
+            color: white;
+            border: none;
+            padding: 0.4rem 0.75rem;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .show-code-btn:hover {
+            background: var(--avalanche-red-hover);
+        }
+
+        .no-issues {
+            text-align: center;
+            padding: 1.5rem;
+            color: var(--success-green);
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .analysis-progress {
+            text-align: center;
+            padding: 1.5rem;
+            color: var(--avalanche-light-gray);
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--avalanche-border);
+            border-top: 3px solid var(--avalanche-red);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .app-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 60px 350px auto 1fr;
+            }
+            
+            .code-pane {
+                grid-column: 1;
+                grid-row: 2;
+            }
+            
+            .control-panel {
+                grid-column: 1;
+                grid-row: 3;
+            }
+            
+            .results-panel {
+                grid-column: 1;
+                grid-row: 4;
+            }
+            
+            .extended-results-panel {
+                display: none;
+            }
+            
+            .worker-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .worker-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .scorecard {
+                grid-template-columns: repeat(1, 1fr);
+            }
+        }
+
+        /* Custom Scrollbar */
+        .results-content::-webkit-scrollbar,
+        .extended-results-content::-webkit-scrollbar,
+        .control-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .results-content::-webkit-scrollbar-track,
+        .extended-results-content::-webkit-scrollbar-track,
+        .control-panel::-webkit-scrollbar-track {
+            background: var(--avalanche-off-white);
+        }
+
+        .results-content::-webkit-scrollbar-thumb,
+        .extended-results-content::-webkit-scrollbar-thumb,
+        .control-panel::-webkit-scrollbar-thumb {
+            background: var(--avalanche-light-gray);
+            border-radius: 3px;
+        }
+
+        .results-content::-webkit-scrollbar-thumb:hover,
+        .extended-results-content::-webkit-scrollbar-thumb:hover,
+        .control-panel::-webkit-scrollbar-thumb:hover {
+            background: var(--avalanche-gray);
+        }
     </style>
 </head>
 <body>
-    <main>
-        <h1>Avalanche Sentinel V3</h1>
-        <p>A complete, Avalanche-native smart contract auditing platform. Paste your Solidity code, select an analysis type, and get an instant, in-depth report from our specialized backend workers.</p>
-        
-        <textarea id="codeInput" placeholder="pragma solidity ^0.8.20; ..."></textarea>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-section">
+                <div class="logo">AS</div>
+                <div>
+                    <div class="title">Avalanche Sentinel</div>
+                    <div class="subtitle">Smart Contract Analysis Platform</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="connection-status">
+                    <div class="status-dot"></div>
+                    <span id="connectionStatus">Connected to Gateway</span>
+                </div>
+            </div>
+        </header>
 
-        <div id="genesisContainer">
-            <h3>Subnet Genesis (Optional)</h3>
-            <p>For Portability and Gas analysis, you can provide the target Subnet's `genesis.json` to get context-aware results.</p>
-            <textarea id="genesisInput" placeholder='{ "config": { "feeConfig": { "gasLimit": 8000000, "minBaseFee": 25000000000 } } ... }'></textarea>
+        <!-- Top Left - Code Editor Pane -->
+        <div class="code-pane">
+            <div class="code-header">
+                <div class="code-title">Smart Contract Source Code</div>
+                <div class="code-stats">
+                    <span id="lineCount">0 lines</span>
+                    <span id="charCount">0 characters</span>
+                </div>
+            </div>
+            <div class="editor-container" id="editorContainer"></div>
         </div>
 
-        <div class="controls">
-            <div>
-                <label for="analysisType">Analysis Type:</label>
-                <select id="analysisType">
-                    <option value="security">Core Security (V2.1)</option>
-                    <option value="portability">Subnet Portability (V3)</option>
-                    <option value="awm">AWM Interoperability (V3)</option>
-                    <option value="staking">Staking Precompile (V3)</option>
-                    <option value="consensus">Consensus Compliance (V3)</option>
-                    <option value="gas">Gas & Fee Market (V3)</option>
-                    <option value="upgrade">Upgradeability & Governance (V3)</option>
-                    <option value="ecosystem">Ecosystem & Dependency (V3)</option>
+        <!-- Top Right - Control Panel -->
+        <div class="control-panel">
+            <div class="project-section">
+                <label class="section-label" for="projectName">Project Name</label>
+                <input type="text" id="projectName" class="project-input" placeholder="e.g., MyToken V1 Security Audit">
+            </div>
+
+            <div class="analysis-section">
+                <label class="section-label" for="analysisType">Analysis Type</label>
+                <select id="analysisType" class="analysis-select">
+                    <option value="security">🛡️ Core Security Analysis (V2.1)</option>
+                    <option value="portability">🔄 Subnet Portability (V3)</option>
+                    <option value="awm">🌐 AWM Interoperability (V3)</option>
+                    <option value="staking">⚡ Staking Precompile (V3)</option>
+                    <option value="consensus">🤝 Consensus Compliance (V3)</option>
+                    <option value="gas">⛽ Gas & Fee Market (V3)</option>
+                    <option value="upgrade">🔧 Upgradeability & Governance (V3)</option>
+                    <option value="ecosystem">🌍 Ecosystem & Dependency (V3)</option>
                 </select>
             </div>
-            <button id="analyzeButton">Analyze</button>
+
+            <div class="genesis-section" id="genesisSection">
+                <label class="section-label" for="genesisInput">Subnet Genesis Configuration</label>
+                <textarea id="genesisInput" class="genesis-textarea" placeholder='{ "config": { "feeConfig": { "gasLimit": 8000000 } } }'></textarea>
+            </div>
+
+            <button id="analyzeButton" class="analyze-button">
+                <span id="buttonText">🚀 Analyze Contract</span>
+            </button>
+
+            <!-- Scorecard -->
+            <div class="scorecard" id="scorecard">
+                <div class="score-card">
+                    <div class="score-number critical" id="criticalCount">0</div>
+                    <div class="score-label">Critical</div>
+                </div>
+                <div class="score-card">
+                    <div class="score-number warning" id="warningCount">0</div>
+                    <div class="score-label">Warnings</div>
+                </div>
+                <div class="score-card">
+                    <div class="score-number info" id="infoCount">0</div>
+                    <div class="score-label">Info</div>
+                </div>
+            </div>
+
+            <!-- Worker Grid -->
+            <div class="worker-grid" id="workerGrid">
+                <div class="worker-card" data-worker="security">
+                    <div class="worker-icon">🛡️</div>
+                    <div class="worker-name">Core Security</div>
+                    <div class="checkmark">✓</div>
+                </div>
+                <div class="worker-card" data-worker="portability">
+                    <div class="worker-icon">🔄</div>
+                    <div class="worker-name">Portability</div>
+                    <div class="checkmark">✓</div>
+                </div>
+                <div class="worker-card" data-worker="awm">
+                    <div class="worker-icon">🌐</div>
+                    <div class="worker-name">AWM</div>
+                    <div class="checkmark">✓</div>
+                </div>
+                <div class="worker-card" data-worker="staking">
+                    <div class="worker-icon">⚡</div>
+                    <div class="worker-name">Staking</div>
+                    <div class="checkmark">✓</div>
+                </div>
+                <div class="worker-card" data-worker="consensus">
+                    <div class="worker-icon">🤝</div>
+                    <div class="worker-name">Consensus</div>
+                    <div class="checkmark">✓</div>
+                </div>
+                <div class="worker-card" data-worker="gas">
+                    <div class="worker-icon">⛽</div>
+                    <div class="worker-name">Gas</div>
+                    <div class="checkmark">✓</div>
+                </div>
+                <div class="worker-card" data-worker="upgrade">
+                    <div class="worker-icon">🔧</div>
+                    <div class="worker-name">Upgrade</div>
+                    <div class="checkmark">✓</div>
+                </div>
+                <div class="worker-card" data-worker="ecosystem">
+                    <div class="worker-icon">🌍</div>
+                    <div class="worker-name">Ecosystem</div>
+                    <div class="checkmark">✓</div>
+                </div>
+            </div>
         </div>
 
-        <div id="status" class="status-idle">Status: Idle</div>
-
-        <h2>Results</h2>
-        <div id="results">
-            <p style="font-family: sans-serif; color: #777;">Analysis results will appear here.</p>
+        <!-- Bottom Left - Results Panel -->
+        <div class="results-panel">
+            <div class="results-header">
+                <div class="results-title">Analysis Results</div>
+            </div>
+            <div class="results-content" id="resultsContent">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🔍</div>
+                    <p>Paste your Solidity code and click "Analyze Contract" to begin security analysis.</p>
+                </div>
+            </div>
         </div>
-    </main>
+
+        <!-- Bottom Right - Extended Results Panel -->
+        <div class="extended-results-panel">
+            <div class="extended-results-header">
+                <div class="extended-results-title">Detailed Findings</div>
+            </div>
+            <div class="extended-results-content" id="extendedResultsContent">
+                <div class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <p>Detailed vulnerability analysis and recommendations will appear here.</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const codeInput = document.getElementById('codeInput');
-        const analysisTypeSelect = document.getElementById('analysisType');
-        const analyzeButton = document.getElementById('analyzeButton');
-        const statusDiv = document.getElementById('status');
-        const resultsDiv = document.getElementById('results');
-        const genesisContainer = document.getElementById('genesisContainer');
-        const genesisInput = document.getElementById('genesisInput');
-        
+        let editor;
         let socket;
+        let analysisInProgress = false;
 
-        const updateStatus = (text, className) => {
-            statusDiv.textContent = `Status: ${text}`;
-            statusDiv.className = className;
+        // Initialize Monaco Editor
+        require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.44.0/min/vs' }});
+        require(['vs/editor/editor.main'], function () {
+            editor = monaco.editor.create(document.getElementById('editorContainer'), {
+                value: `// Welcome to Avalanche Sentinel V3
+// Paste your Solidity smart contract code here for comprehensive analysis
+
+pragma solidity ^0.8.20;
+
+contract Example {
+    // Your contract code here
+}`,
+                language: 'solidity',
+                theme: 'vs',
+                fontSize: 14,
+                lineNumbers: 'on',
+                minimap: { enabled: true },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                wordWrap: 'on',
+                renderWhitespace: 'selection',
+                rulers: [80, 120]
+            });
+
+            // Update line and character count
+            updateStats();
+            editor.onDidChangeModelContent(() => {
+                updateStats();
+            });
+        });
+
+        // DOM Elements
+        const analysisSelect = document.getElementById('analysisType');
+        const genesisSection = document.getElementById('genesisSection');
+        const genesisInput = document.getElementById('genesisInput');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const buttonText = document.getElementById('buttonText');
+        const workerGrid = document.getElementById('workerGrid');
+        const scorecard = document.getElementById('scorecard');
+        const resultsContent = document.getElementById('resultsContent');
+        const extendedResultsContent = document.getElementById('extendedResultsContent');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const criticalCount = document.getElementById('criticalCount');
+        const warningCount = document.getElementById('warningCount');
+        const infoCount = document.getElementById('infoCount');
+        const lineCount = document.getElementById('lineCount');
+        const charCount = document.getElementById('charCount');
+
+        // Worker type mapping
+        const workerTypeMap = {
+            'security': 'security',
+            'portability': 'portability', 
+            'awm': 'awm',
+            'staking': 'staking',
+            'consensus': 'consensus',
+            'gas': 'gas',
+            'upgrade': 'upgrade',
+            'ecosystem': 'ecosystem'
         };
 
-        const toggleGenesisInput = () => {
-            const selectedType = analysisTypeSelect.value;
-            if (selectedType === 'portability' || selectedType === 'gas') {
-                genesisContainer.style.display = 'block';
-            } else {
-                genesisContainer.style.display = 'none';
+        // Event Listeners
+        analysisSelect.addEventListener('change', toggleGenesisInput);
+        analyzeButton.addEventListener('click', startAnalysis);
+
+        function updateStats() {
+            if (editor) {
+                const model = editor.getModel();
+                const lines = model.getLineCount();
+                const chars = model.getValueLength();
+                
+                lineCount.textContent = `${lines} lines`;
+                charCount.textContent = `${chars} characters`;
             }
-        };
+        }
 
-        analysisTypeSelect.addEventListener('change', toggleGenesisInput);
-        
-        analyzeButton.addEventListener('click', () => {
-            const sourceCode = codeInput.value;
-            const analysisType = analysisTypeSelect.value;
+        function toggleGenesisInput() {
+            const selectedType = analysisSelect.value;
+            if (selectedType === 'portability' || selectedType === 'gas') {
+                genesisSection.style.display = 'block';
+            } else {
+                genesisSection.style.display = 'none';
+            }
+        }
 
-            if (!sourceCode.trim()) {
-                alert('Please paste your Solidity code.');
+        function startAnalysis() {
+            if (analysisInProgress) return;
+            
+            const sourceCode = editor.getValue();
+            const analysisType = analysisSelect.value;
+
+            if (!sourceCode.trim() || sourceCode.includes('// Your contract code here')) {
+                alert('Please paste your Solidity smart contract code for analysis.');
                 return;
             }
 
             let subnetGenesis = null;
-            if (genesisContainer.style.display === 'block' && genesisInput.value.trim()) {
+            if (genesisSection.style.display === 'block' && genesisInput.value.trim()) {
                 try {
                     subnetGenesis = JSON.parse(genesisInput.value);
                 } catch (e) {
-                    alert('The Subnet Genesis is not valid JSON. Please correct it or leave it blank.');
+                    alert('Invalid JSON in Subnet Genesis configuration. Please fix it or leave it blank.');
                     return;
                 }
             }
-            
+
             connectAndAnalyze(sourceCode, analysisType, subnetGenesis);
-        });
+        }
 
         function connectAndAnalyze(sourceCode, analysisType, subnetGenesis) {
+            analysisInProgress = true;
             analyzeButton.disabled = true;
-            updateStatus('Connecting to Gateway...', 'status-progress');
-            resultsDiv.innerHTML = '<p style="font-family: sans-serif; color: #777;">Analysis in progress...</p>';
+            buttonText.textContent = '🔄 Connecting...';
+            
+            // Reset UI
+            resetAnalysisUI();
+            showAnalysisProgress();
 
             socket = new WebSocket('ws://127.0.0.1:8080');
 
             socket.onopen = () => {
-                updateStatus('Connected. Sending job...', 'status-progress');
+                buttonText.textContent = '📡 Sending Job...';
+                connectionStatus.textContent = 'Connected to Gateway';
+                
                 const payload = {
                     source_code: sourceCode,
                     analysis_type: analysisType,
@@ -147,45 +939,102 @@
                 const data = JSON.parse(event.data);
 
                 if (data.status && data.status.includes('Dispatched')) {
-                    updateStatus(`Job Dispatched (${data.jobId}). Awaiting analysis...`, 'status-progress');
+                    buttonText.textContent = `⚡ Analysis Running... (Job: ${data.jobId})`;
+                    connectionStatus.textContent = `Job Dispatched: ${data.jobId}`;
                 } else if (data.worker_name) {
-                    updateStatus(`Analysis Complete (Worker: ${data.worker_name})`, 'status-complete');
+                    // Analysis complete
+                    const workerType = getWorkerTypeFromName(data.worker_name);
+                    activateWorkerCard(workerType);
+                    
+                    buttonText.textContent = '✅ Analysis Complete';
+                    connectionStatus.textContent = `Completed by ${data.worker_name}`;
+                    
                     renderResults(data);
                     socket.close();
                 } else {
-                    updateStatus('Received unknown message.', 'status-error');
                     console.warn("Unknown message:", data);
                 }
             };
 
             socket.onclose = () => {
-                updateStatus('Idle (Connection Closed)', 'status-idle');
-                analyzeButton.disabled = false;
+                resetButton();
+                connectionStatus.textContent = 'Connected to Gateway';
             };
 
             socket.onerror = (error) => {
-                updateStatus('Error! Could not connect to the backend gateway.', 'status-error');
-                resultsDiv.innerHTML = `<p style="color: red; font-family: sans-serif;"><strong>Connection Error:</strong> Please ensure all 9 backend services (1 Gateway + 8 Workers) are running.</p>`;
+                buttonText.textContent = '❌ Connection Failed';
+                connectionStatus.textContent = 'Connection Error';
+                showConnectionError();
                 console.error('WebSocket Error:', error);
-                analyzeButton.disabled = false;
+                resetButton();
             };
         }
 
-        function renderResults(data) {
-            resultsDiv.innerHTML = ''; 
+        function resetAnalysisUI() {
+            // Reset worker cards
+            document.querySelectorAll('.worker-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            
+            // Hide scorecard and worker grid initially
+            scorecard.style.display = 'none';
+            workerGrid.style.display = 'none';
+        }
 
-            const workerName = data.worker_name || '';
+        function showAnalysisProgress() {
+            workerGrid.style.display = 'grid';
+            resultsContent.innerHTML = `
+                <div class="analysis-progress">
+                    <div class="spinner"></div>
+                    <p>Analyzing your smart contract...</p>
+                </div>
+            `;
+            extendedResultsContent.innerHTML = `
+                <div class="analysis-progress">
+                    <div class="spinner"></div>
+                    <p>Generating detailed findings...</p>
+                </div>
+            `;
+        }
+
+        function activateWorkerCard(workerType) {
+            const card = document.querySelector(`.worker-card[data-worker="${workerType}"]`);
+            if (card) {
+                card.classList.add('active');
+            }
+        }
+
+        function getWorkerTypeFromName(workerName) {
+            const name = workerName.toLowerCase();
+            
+            if (name.includes('security')) return 'security';
+            if (name.includes('portability')) return 'portability';
+            if (name.includes('awm')) return 'awm';
+            if (name.includes('staking')) return 'staking';
+            if (name.includes('consensus')) return 'consensus';
+            if (name.includes('gas')) return 'gas';
+            if (name.includes('upgrade')) return 'upgrade';
+            if (name.includes('ecosystem')) return 'ecosystem';
+            
+            return 'security'; // fallback
+        }
+
+        function renderResults(data) {
             const output = data.output;
+            const workerName = data.worker_name || '';
 
             if (output.error) {
-                resultsDiv.innerHTML = `<p style="color: red; font-family: sans-serif;"><strong>Analysis Error:</strong><br><pre>${output.error}</pre></p><p style="font-family: sans-serif;">${output.recommendation || ''}</p>`;
+                showError(output.error, output.recommendation);
                 return;
             }
-            
+
             if (!output || (Array.isArray(output) && output.length === 0)) {
-                 resultsDiv.innerHTML = '<p style="color: green; font-family: sans-serif;"><strong>No issues found!</strong></p>';
-                 return;
+                showNoIssues();
+                return;
             }
+
+            // Show scorecard
+            scorecard.style.display = 'grid';
 
             if (workerName.toLowerCase().includes('security')) {
                 renderSecurityResults(output);
@@ -195,85 +1044,312 @@
                 renderStandardResults(output, workerName);
             }
         }
-        
-        function renderStandardResults(output, workerName) {
-            const type = workerName.toLowerCase().replace('v3','').replace('v2','').replace('worker','');
-            output.forEach(issue => {
-                const issueDiv = document.createElement('div');
-                issueDiv.className = 'issue';
-                const typeClass = `issue-type-${type}`;
+
+        function renderStandardResults(issues, workerName) {
+            let html = '';
+            let extendedHtml = '';
+            let critical = 0, warning = 0, info = 0;
+
+            issues.forEach((issue, index) => {
+                const severity = getSeverityFromType(issue.issue_type);
+                if (severity === 'critical') critical++;
+                else if (severity === 'high') warning++;
+                else info++;
+
+                const issueCard = createIssueCard(issue.issue_type, issue.description, issue.recommendation, severity, workerName);
                 
-                issueDiv.innerHTML = `
-                    <span class="issue-title ${typeClass}">[${issue.issue_type}]</span>
-                    <div><strong>Description:</strong> ${issue.description}</div>
-                    <div class="issue-recommendation"><strong>Recommendation:</strong> ${issue.recommendation}</div>
-                `;
-                resultsDiv.appendChild(issueDiv);
+                // Split results between two panels
+                if (index % 2 === 0) {
+                    html += issueCard;
+                } else {
+                    extendedHtml += issueCard;
+                }
             });
+
+            updateScorecard(critical, warning, info);
+            resultsContent.innerHTML = html;
+            extendedResultsContent.innerHTML = extendedHtml;
         }
-        
+
         function renderSecurityResults(output) {
-            let foundIssues = false;
+            let html = '';
+            let extendedHtml = '';
+            let critical = 0, warning = 0, info = 0;
+            let issueIndex = 0;
+
             if (output.informational_findings && output.informational_findings.length > 0) {
-                 output.informational_findings.forEach(warn => {
-                    foundIssues = true;
-                    const issueDiv = document.createElement('div');
-                    issueDiv.className = 'issue';
-                    issueDiv.innerHTML = `
-                        <span class="issue-title issue-type-security">[${warn.finding_type}]</span>
-                        <pre>${warn.message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
-                    `;
-                    resultsDiv.appendChild(issueDiv);
+                output.informational_findings.forEach(finding => {
+                    info++;
+                    const issueCard = createIssueCard(
+                        finding.finding_type,
+                        finding.message,
+                        'Review the highlighted code section and consider the security implications.',
+                        'low',
+                        'Core Security Worker'
+                    );
+                    
+                    if (issueIndex % 2 === 0) {
+                        html += issueCard;
+                    } else {
+                        extendedHtml += issueCard;
+                    }
+                    issueIndex++;
                 });
             }
+
             if (output.slither_report && output.slither_report.results && output.slither_report.results.detectors.length > 0) {
-                 output.slither_report.results.detectors.forEach(detector => {
-                     foundIssues = true;
-                     const issueDiv = document.createElement('div');
-                     issueDiv.className = 'issue';
-                     issueDiv.innerHTML = `
-                        <span class="issue-title issue-type-security">[Slither: ${detector.check} - Impact: ${detector.impact}]</span>
-                        <div><strong>Description:</strong> ${detector.description.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-                    `;
-                    resultsDiv.appendChild(issueDiv);
-                 });
+                output.slither_report.results.detectors.forEach(detector => {
+                    const severity = mapSlitherSeverity(detector.impact);
+                    if (severity === 'critical') critical++;
+                    else if (severity === 'high') warning++;
+                    else info++;
+
+                    const issueCard = createIssueCard(
+                        `${detector.check} (${detector.impact})`,
+                        detector.description,
+                        'Address this security vulnerability to improve contract safety.',
+                        severity,
+                        'Core Security Worker (Slither)'
+                    );
+                    
+                    if (issueIndex % 2 === 0) {
+                        html += issueCard;
+                    } else {
+                        extendedHtml += issueCard;
+                    }
+                    issueIndex++;
+                });
             } else if (output.slither_report && output.slither_report.success === false) {
-                 foundIssues = true;
-                 resultsDiv.innerHTML += `<p style="color: red; font-family: sans-serif;"><strong>Slither Analysis Error:</strong><br><pre>${output.slither_report.error}</pre></p>`;
+                const errorCard = `<div class="issue-card">
+                    <div class="issue-header">
+                        <div class="issue-left">
+                            <span class="severity-badge severity-critical">ERROR</span>
+                            <span class="issue-title-text">Slither Analysis Error</span>
+                        </div>
+                    </div>
+                    <div class="issue-body">
+                        <div class="issue-description">
+                            <pre style="white-space: pre-wrap; font-size: 12px;">${output.slither_report.error}</pre>
+                        </div>
+                    </div>
+                </div>`;
+                html += errorCard;
             }
-            if (!foundIssues) {
-                resultsDiv.innerHTML = '<p style="color: green; font-family: sans-serif;"><strong>No issues found!</strong></p>';
+
+            if (html === '' && extendedHtml === '') {
+                showNoIssues();
+            } else {
+                updateScorecard(critical, warning, info);
+                resultsContent.innerHTML = html || '<div class="empty-state"><div class="empty-state-icon">✅</div><p>No issues in this section.</p></div>';
+                extendedResultsContent.innerHTML = extendedHtml || '<div class="empty-state"><div class="empty-state-icon">✅</div><p>No additional issues found.</p></div>';
             }
         }
 
         function renderGasResults(output) {
-            output.forEach(contractResult => {
-                let html = `<div class="issue"><h3>Contract: ${contractResult.contractName}</h3>`;
-                html += `<div><strong>Deployment Cost:</strong> ${contractResult.deploymentCost} gas</div>`;
-                
-                if (contractResult.functionProfiles && contractResult.functionProfiles.length > 0) {
-                    html += '<h4>Function Profiles:</h4>';
-                    contractResult.functionProfiles.forEach(func => {
-                        html += `<div>- <strong>${func.functionName}</strong>: ${func.gasCost} gas ${func.subnetFeeComparison ? `<br>&nbsp;&nbsp;<em>${func.subnetFeeComparison}</em>`: ''}</div>`;
-                    });
-                }
+            let html = '';
+            let extendedHtml = '';
+            let critical = 0, warning = 0, info = 0;
 
-                if (contractResult.optimizationIssues && contractResult.optimizationIssues.length > 0) {
-                    html += '<h4>Optimization Issues Found:</h4>';
-                    contractResult.optimizationIssues.forEach(issue => {
-                         html += `<div style="margin-top: 1em;">
-                            <span class="issue-title issue-type-gas">[${issue.issue_type}]</span>
-                            <div><strong>Description:</strong> ${issue.description}</div>
-                            <div class="issue-recommendation"><strong>Recommendation:</strong> ${issue.recommendation}</div>
-                         </div>`;
-                    });
+            output.forEach((contractResult, index) => {
+                const contractCard = `<div class="issue-card">
+                    <div class="issue-header">
+                        <div class="issue-left">
+                            <span class="severity-badge severity-low">CONTRACT</span>
+                            <span class="issue-title-text">${contractResult.contractName}</span>
+                        </div>
+                        <div class="worker-badge">
+                            <span>⛽</span>
+                            <span>Gas Analysis Worker</span>
+                        </div>
+                    </div>
+                    <div class="issue-body">
+                        <div class="issue-description">
+                            <strong>Deployment Cost:</strong> ${contractResult.deploymentCost} gas
+                        </div>
+                        ${contractResult.functionProfiles && contractResult.functionProfiles.length > 0 ? 
+                            `<h4 style="margin: 1rem 0 0.5rem 0; font-size: 12px;">Function Gas Profiles:</h4>
+                            ${contractResult.functionProfiles.map(func => 
+                                `<div style="margin-bottom: 0.5rem; font-size: 12px;">
+                                    <strong>${func.functionName}:</strong> ${func.gasCost} gas
+                                    ${func.subnetFeeComparison ? `<br><em style="color: var(--avalanche-light-gray); font-size: 11px;">${func.subnetFeeComparison}</em>` : ''}
+                                </div>`
+                            ).join('')}` : ''
+                        }
+                        ${contractResult.optimizationIssues && contractResult.optimizationIssues.length > 0 ? 
+                            `<h4 style="margin: 1rem 0 0.5rem 0; font-size: 12px;">Optimization Opportunities:</h4>
+                            ${contractResult.optimizationIssues.map(issue => {
+                                warning++;
+                                return `<div style="margin-top: 0.75rem;">
+                                    <div style="font-weight: 600; color: var(--warning-yellow); margin-bottom: 0.25rem; font-size: 12px;">${issue.issue_type}</div>
+                                    <div style="margin-bottom: 0.5rem; font-size: 12px;">${issue.description}</div>
+                                    <div class="issue-recommendation">
+                                        <div class="recommendation-title">Recommendation</div>
+                                        <div style="font-size: 12px;">${issue.recommendation}</div>
+                                    </div>
+                                </div>`;
+                            }).join('')}` : ''
+                        }
+                    </div>
+                </div>`;
+                
+                if (index % 2 === 0) {
+                    html += contractCard;
+                } else {
+                    extendedHtml += contractCard;
                 }
-                html += `</div>`;
-                resultsDiv.innerHTML += html;
             });
+
+            updateScorecard(critical, warning, info);
+            resultsContent.innerHTML = html;
+            extendedResultsContent.innerHTML = extendedHtml;
         }
-        
-        // Initial setup
+
+        function createIssueCard(title, description, recommendation, severity, workerName) {
+            return `
+                <div class="issue-card">
+                    <div class="issue-header">
+                        <div class="issue-left">
+                            <span class="severity-badge severity-${severity}">${severity.toUpperCase()}</span>
+                            <span class="issue-title-text">${title}</span>
+                        </div>
+                        <div class="worker-badge">
+                            <span>${getWorkerIcon(workerName)}</span>
+                            <span>${workerName}</span>
+                        </div>
+                    </div>
+                    <div class="issue-body">
+                        <div class="issue-description">${description}</div>
+                        <div class="issue-recommendation">
+                            <div class="recommendation-title">Recommendation</div>
+                            ${recommendation}
+                        </div>
+                        <button class="show-code-btn" onclick="highlightInEditor()">Show in Code</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getSeverityFromType(issueType) {
+            const type = issueType.toLowerCase();
+            if (type.includes('critical') || type.includes('security') || type.includes('vulnerability')) {
+                return 'critical';
+            } else if (type.includes('warning') || type.includes('medium') || type.includes('gas')) {
+                return 'high';
+            } else {
+                return 'low';
+            }
+        }
+
+        function mapSlitherSeverity(impact) {
+            switch(impact.toLowerCase()) {
+                case 'high': return 'critical';
+                case 'medium': return 'high';
+                case 'low': return 'medium';
+                default: return 'low';
+            }
+        }
+
+        function getWorkerIcon(workerName) {
+            const name = workerName.toLowerCase();
+            if (name.includes('security')) return '🛡️';
+            if (name.includes('portability')) return '🔄';
+            if (name.includes('awm')) return '🌐';
+            if (name.includes('staking')) return '⚡';
+            if (name.includes('consensus')) return '🤝';
+            if (name.includes('gas')) return '⛽';
+            if (name.includes('upgrade')) return '🔧';
+            if (name.includes('ecosystem')) return '🌍';
+            return '🔍';
+        }
+
+        function updateScorecard(critical, warning, info) {
+            criticalCount.textContent = critical;
+            warningCount.textContent = warning;
+            infoCount.textContent = info;
+        }
+
+        function showNoIssues() {
+            scorecard.style.display = 'grid';
+            updateScorecard(0, 0, 0);
+            resultsContent.innerHTML = `
+                <div class="no-issues">
+                    <div style="font-size: 32px; margin-bottom: 1rem;">✅</div>
+                    <div>Excellent! No issues found.</div>
+                </div>
+            `;
+            extendedResultsContent.innerHTML = `
+                <div class="no-issues">
+                    <div style="font-size: 32px; margin-bottom: 1rem;">🎉</div>
+                    <div>Your code passed all checks!</div>
+                </div>
+            `;
+        }
+
+        function showError(error, recommendation) {
+            const errorCard = `
+                <div class="issue-card">
+                    <div class="issue-header">
+                        <div class="issue-left">
+                            <span class="severity-badge severity-critical">ERROR</span>
+                            <span class="issue-title-text">Analysis Error</span>
+                        </div>
+                    </div>
+                    <div class="issue-body">
+                        <div class="issue-description">
+                            <pre style="white-space: pre-wrap; font-size: 12px;">${error}</pre>
+                        </div>
+                        ${recommendation ? `<div class="issue-recommendation">
+                            <div class="recommendation-title">Recommendation</div>
+                            ${recommendation}
+                        </div>` : ''}
+                    </div>
+                </div>
+            `;
+            resultsContent.innerHTML = errorCard;
+            extendedResultsContent.innerHTML = '';
+        }
+
+        function showConnectionError() {
+            const errorCard = `
+                <div class="issue-card">
+                    <div class="issue-header">
+                        <div class="issue-left">
+                            <span class="severity-badge severity-critical">CONNECTION ERROR</span>
+                            <span class="issue-title-text">Backend Connection Failed</span>
+                        </div>
+                    </div>
+                    <div class="issue-body">
+                        <div class="issue-description">
+                            Could not connect to the Avalanche Sentinel backend gateway. 
+                            Please ensure all backend services are running.
+                        </div>
+                        <div class="issue-recommendation">
+                            <div class="recommendation-title">Required Services</div>
+                            • 1 Gateway service (WebSocket server)<br>
+                            • 8 Specialized analysis workers
+                        </div>
+                    </div>
+                </div>
+            `;
+            resultsContent.innerHTML = errorCard;
+            extendedResultsContent.innerHTML = '';
+        }
+
+        function highlightInEditor() {
+            // This function could be enhanced to actually highlight specific lines
+            // For now, it just focuses the editor
+            if (editor) {
+                editor.focus();
+            }
+        }
+
+        function resetButton() {
+            analysisInProgress = false;
+            analyzeButton.disabled = false;
+            buttonText.textContent = '🚀 Analyze Contract';
+        }
+
+        // Initialize
         toggleGenesisInput();
     </script>
 </body>
