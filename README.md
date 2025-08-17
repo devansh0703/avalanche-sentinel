@@ -3,7 +3,6 @@
 **A Hyper-Specialized, Multi-Agent Auditing Platform for the Avalanche Ecosystem**
 
 **Project by: Bitflippers**
-(Dhairya Shukla • Devansh Raulo • Ashmit Kinariwala • Aaryan Kamdar)
 [![Watch the Demo](https://img.shields.io/badge/Watch_the-Demo-E84142?style=for-the-badge&logo=youtube)](https://youtu.be/UuEp99h5Zto)
 ---
 
