@@ -5,6 +5,7 @@
 
 # Step 2: Explicitly UN-ignore the .gitignore file itself and the top-level backend folder.
 !.gitignore
+!index.html
 !backend/
 
 # Step 3: Explicitly UN-ignore the directory structure.
