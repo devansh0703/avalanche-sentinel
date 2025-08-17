@@ -4,15 +4,17 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-// --- Type Definitions (Unchanged) ---
+// --- Type Definitions ---
 interface AnalysisJob {
     job_id: string;
     source_code: string;
+    subnet_genesis?: Genesis;
 }
+interface Genesis { config: { feeConfig: { minBaseFee?: number } } }
 interface FunctionGasProfile {
     functionName: string;
     gasCost: string;
-    sstoreCount: number;
+    subnetFeeComparison?: string;
 }
 interface GasAnalysisOutput {
     contractName: string;
@@ -21,7 +23,7 @@ interface GasAnalysisOutput {
     optimizationIssues: GasOptimizationIssue[];
 }
 interface GasOptimizationIssue {
-    functionName: string;
+    line: number;
     issue_type: string;
     description: string;
     recommendation: string;
@@ -34,7 +36,7 @@ interface AnalysisResult {
 
 // --- Main Worker Logic ---
 async function main() {
-    console.log('Starting Gas & Fee Worker [V2 DEFINITIVE, File Output]...');
+    console.log('Starting Gas & Fee Worker [V3 DEFINITIVE, Regex]...');
     const redisClient = createClient();
     await redisClient.connect();
     console.log('Successfully connected to Redis.');
@@ -46,10 +48,9 @@ async function main() {
         try {
             const jobData = await redisClient.blPop(channel, 0);
             if (jobData) {
-                console.log('\nReceived new job.');
                 const job: AnalysisJob = JSON.parse(jobData.element);
-                console.log(`Processing Job ID: ${job.job_id}`);
-                const result = analyzeGasV2(job);
+                console.log(`\nProcessing Job ID: ${job.job_id}`);
+                const result = analyzeGasV3(job);
                 await publishResult(redisClient, result);
             }
         } catch (error) {
@@ -58,7 +59,7 @@ async function main() {
     }
 }
 
-function analyzeGasV2(job: AnalysisJob): AnalysisResult {
+function analyzeGasV3(job: AnalysisJob): AnalysisResult {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sentinel-gas-'));
     const userContractPath = path.join(tempDir, 'contract.sol');
     const outputPath = path.join(tempDir, 'output.json');
@@ -77,24 +78,16 @@ function analyzeGasV2(job: AnalysisJob): AnalysisResult {
     try {
         fs.writeFileSync(userContractPath, job.source_code);
 
-        // --- THE DEFINITIVE FIX: Use --standard-json with file output ---
         const inputJson = {
             language: 'Solidity',
             sources: { 'contract.sol': { urls: ['contract.sol'] } },
-            settings: {
-                outputSelection: {
-                    '*': {
-                        '*': ['evm.gasEstimates', 'evm.bytecode.opcodes', 'abi'],
-                    },
-                },
-            }
+            settings: { outputSelection: { '*': { '*': ['evm.gasEstimates'] } } }
         };
         
         execSync(`solc --standard-json --allow-paths . > ${outputPath}`, { ...execOptions, input: JSON.stringify(inputJson) });
 
         const outputJsonString = fs.readFileSync(outputPath, 'utf-8');
         const output = JSON.parse(outputJsonString);
-        // --- END OF FIX ---
 
         if (output.errors) {
             const compilationErrors = output.errors.filter((e: any) => e.severity === 'error');
@@ -105,69 +98,72 @@ function analyzeGasV2(job: AnalysisJob): AnalysisResult {
         
         const fileName = 'contract.sol';
         const results: GasAnalysisOutput[] = [];
+        let optimizationIssues: GasOptimizationIssue[] = [];
+        
+        // --- THE DEFINITIVE FIX: Use Regex on the source code ---
+        const lines = job.source_code.split('\n');
+        // Regex to find function definitions with dynamic memory parameters
+        const griefingRegex = /function\s+([a-zA-Z0-9_]+)\s*\([^)]*?(?:string|bytes)\s+memory\s+[^)]*?\)/g;
 
-        for (const contractName in output.contracts[fileName]) {
-            const contract = output.contracts[fileName][contractName];
-            const gasEstimates = contract.evm.gasEstimates;
-            const opcodes = contract.evm.bytecode.opcodes;
-            const abi = contract.abi;
-            
-            const optimizationIssues: GasOptimizationIssue[] = [];
-            const functionProfiles: FunctionGasProfile[] = [];
+        for(let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            let match;
+            while ((match = griefingRegex.exec(line)) !== null) {
+                optimizationIssues.push({
+                    line: i + 1,
+                    issue_type: "Griefing Vector Hazard",
+                    description: `Function '${match[1]}' accepts a dynamic 'string' or 'bytes' memory parameter.`,
+                    recommendation: "On Subnets with low/zero fees, an attacker can pass a very large input to this function, forcing the contract to perform expensive operations (hashing, copying) at no cost to them. Implement strict size limits on dynamic inputs.",
+                });
+            }
+        }
+        // --- END OF FIX ---
 
-            if (gasEstimates && gasEstimates.external) {
-                for (const funcName in gasEstimates.external) {
-                    const gasCost = gasEstimates.external[funcName];
-                    const funcAbi = abi.find((item: any) => item.name === funcName.split('(')[0] && item.type === 'function');
-                    let functionSstoreCount = 0;
-                    
-                    if(funcAbi) {
-                        const functionBodyRegex = new RegExp(`function\\s+${funcAbi.name}\\s*\\([^)]*\\)\\s*[^}]*{(.*?(?=function|fallback|receive|$))`, "s");
-                        const bodyMatch = job.source_code.match(functionBodyRegex);
-                        if (bodyMatch && bodyMatch[1]) {
-                           functionSstoreCount = (bodyMatch[1].match(/\bcounter\s*(\+\+|--|\+=|=)/g) || []).length;
+        const contractsOutput = output.contracts[fileName];
+        if (contractsOutput) {
+            for (const contractName in contractsOutput) {
+                const contract = contractsOutput[contractName];
+                const gasEstimates = contract.evm && contract.evm.gasEstimates;
+                const functionProfiles: FunctionGasProfile[] = [];
+
+                if (gasEstimates && gasEstimates.external) {
+                    for (const funcName in gasEstimates.external) {
+                        const gasCostStr = gasEstimates.external[funcName];
+                        if (gasCostStr === 'infinite') continue;
+                        const gasCost = parseInt(gasCostStr, 10);
+                        
+                        let subnetFeeComparison: string | undefined = undefined;
+                        if (job.subnet_genesis && job.subnet_genesis.config.feeConfig.minBaseFee) {
+                            const minFee = job.subnet_genesis.config.feeConfig.minBaseFee;
+                            const subnetCost = gasCost * minFee;
+                            const cChainCostGwei = 25;
+                            const cChainCost = gasCost * cChainCostGwei;
+                            subnetFeeComparison = `Estimated cost on Subnet: ${subnetCost} nAVAX vs. ~${cChainCost} nAVAX on C-Chain.`;
                         }
-                    }
 
-                    if (functionSstoreCount > 1) {
-                        optimizationIssues.push({
+                        functionProfiles.push({
                             functionName: funcName,
-                            issue_type: "Multiple Storage Writes",
-                            description: `Function '${funcName}' performs ${functionSstoreCount} writes to storage.`,
-                            recommendation: "Multiple storage writes in a single function can be very expensive. Consider batching updates or restructuring logic to minimize SSTORE operations.",
+                            gasCost: gasCostStr,
+                            subnetFeeComparison,
                         });
                     }
-
-                    functionProfiles.push({
-                        functionName: funcName,
-                        gasCost: gasCost,
-                        sstoreCount: functionSstoreCount,
-                    });
                 }
+                
+                results.push({
+                    contractName: contractName,
+                    deploymentCost: (gasEstimates && gasEstimates.creation) ? gasEstimates.creation.totalCost : 'N/A',
+                    functionProfiles: functionProfiles,
+                    optimizationIssues: optimizationIssues,
+                });
             }
-            
-            results.push({
-                contractName: contractName,
-                deploymentCost: gasEstimates.creation.totalCost,
-                functionProfiles: functionProfiles,
-                optimizationIssues: optimizationIssues,
-            });
         }
         
-        console.log(`Gas analysis successful for Job ID: ${job.job_id}`);
-        return {
-            job_id: job.job_id,
-            worker_name: "GasFeeWorkerV2",
-            output: results,
-        };
+        console.log(`V3 gas analysis successful for Job ID: ${job.job_id}`);
+        return { job_id: job.job_id, worker_name: "GasFeeWorkerV3", output: results };
 
     } catch (error: any) {
         console.error(`Gas analysis failed for Job ID: ${job.job_id}`, error);
-        return {
-            job_id: job.job_id,
-            worker_name: "GasFeeWorkerV2",
-            output: { error: error.message || "Failed to compile or analyze contract." },
-        };
+        return { job_id: job.job_id, worker_name: "GasFeeWorkerV3", output: { error: error.message || "Failed to analyze contract." } };
     } finally {
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -177,7 +173,7 @@ async function publishResult(client: any, result: AnalysisResult) {
     const channel = 'sentinel_results';
     const resultJson = JSON.stringify(result);
     await client.rPush(channel, resultJson);
-    console.log(`Published V2 result for Job ID: ${result.job_id}`);
+    console.log(`Published V3 result for Job ID: ${result.job_id}`);
 }
 
 main().catch(console.error);

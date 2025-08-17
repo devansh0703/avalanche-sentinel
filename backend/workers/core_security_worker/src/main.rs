@@ -16,7 +16,7 @@ struct InformationalFinding {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct V2AnalysisResult {
     informational_findings: Vec<InformationalFinding>,
-    slither_report: Value, // This will be the main JSON report
+    slither_report: Value,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -33,7 +33,7 @@ struct FinalResult {
 }
 
 fn main() -> redis::RedisResult<()> {
-    println!("Starting Core Security Worker [V2.1 FINAL]...");
+    println!("Starting Core Security Worker [V2.1 DEFINITIVE]...");
     let redis_client = Client::open("redis://127.0.0.1/")?;
     let mut redis_con = redis_client.get_connection()?;
     println!("Successfully connected to Redis.");
@@ -65,7 +65,6 @@ fn listen_for_jobs(con: &mut Connection) {
     }
 }
 
-// --- V2.1: The Slither function now returns BOTH the JSON and the console warnings ---
 async fn run_slither(contract_path: &std::path::Path) -> Result<(Value, Vec<InformationalFinding>), String> {
     println!("Running Slither for full analysis...");
     let json_output_filename = format!("{}.json", Uuid::new_v4());
@@ -73,7 +72,7 @@ async fn run_slither(contract_path: &std::path::Path) -> Result<(Value, Vec<Info
 
     let existing_path = env::var("PATH").unwrap_or_else(|_| "".to_string());
     let new_path = match home_dir() {
-        Some(path) => format!("{}:{}:{}", path.join(".solc-select").to_string_lossy(), path.join(".local/bin").to_string_lossy(), existing_path),
+        Some(path) => format!("{}:{}:{}:{}", path.join(".foundry/bin").to_string_lossy(), path.join(".solc-select").to_string_lossy(), path.join(".local/bin").to_string_lossy(), existing_path),
         None => existing_path,
     };
 
@@ -83,23 +82,21 @@ async fn run_slither(contract_path: &std::path::Path) -> Result<(Value, Vec<Info
         .arg("--json").arg(&json_output_path)
         .env("PATH", &new_path)
         .stdout(Redirection::Pipe).stderr(Redirection::Pipe)
-        .capture(); // We use .capture() to get stdout/stderr
+        .capture();
 
     let mut informational_findings = Vec::new();
 
     match capture {
         Ok(data) => {
-            // --- V2.1 UPGRADE: Parse stderr for warnings ---
             let stderr_str = String::from_utf8_lossy(&data.stderr);
             for line in stderr_str.lines() {
-                if line.contains("Warning: Unused local variable.") {
+                if line.contains("Warning:") {
                     informational_findings.push(InformationalFinding {
                         finding_type: "Compiler Warning".to_string(),
                         message: line.trim().to_string(),
                     });
                 }
             }
-            // --- END OF UPGRADE ---
             
             if json_output_path.exists() {
                 let json_str = fs::read_to_string(&json_output_path).map_err(|e| e.to_string())?;

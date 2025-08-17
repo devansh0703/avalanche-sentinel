@@ -7,7 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 // The request now includes the type of analysis to perform.
 interface AnalysisJobRequest {
     source_code: string;
-    analysis_type: 'security' | 'portability' | 'awm' | 'staking' | 'gas' | 'upgrade' | 'ecosystem' | 'consensus'; // Enforce specific types
+    analysis_type: 'security' | 'portability' | 'awm' | 'staking' | 'gas' | 'upgrade' | 'ecosystem' | 'consensus'; 
+    subnet_genesis?:any;// Enforce specific types
 }
 
 interface AnalysisJob {
@@ -56,6 +57,7 @@ async function main() {
                 const job: AnalysisJob = {
                     job_id: jobId,
                     source_code: request.source_code,
+                    subnet_genesis: request.subnet_genesis
                 };
                 
                 // --- DISPATCHER LOGIC ---
